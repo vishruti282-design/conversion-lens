@@ -1,4 +1,15 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+
 export default function Home() {
+  const router = useRouter();
+
+  async function handleSignOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
   return (
     <main className="min-h-screen bg-sage flex items-center justify-center p-8">
       <div className="bg-surface rounded-2xl shadow-sm border border-white/60 p-12 max-w-lg w-full space-y-6">
@@ -7,20 +18,14 @@ export default function Home() {
         </h1>
 
         <p className="font-body text-secondary text-lg leading-relaxed">
-          An editorial landing page analysis tool. This card uses the{" "}
-          <span className="text-dark font-medium">surface</span> color on a{" "}
-          <span className="text-dark font-medium">sage</span> background.
+          Welcome back. You are signed in and ready to analyze landing pages.
         </p>
 
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-6xl text-dark">72</span>
-          <span className="font-body text-secondary text-sm">/ 100</span>
-        </div>
-
         <button
+          onClick={handleSignOut}
           className="w-full text-white font-semibold py-3 px-6 rounded-lg transition-colors bg-brand hover:bg-brand/90"
         >
-          Analyze Landing Page
+          Sign Out
         </button>
       </div>
     </main>
