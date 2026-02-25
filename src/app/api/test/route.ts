@@ -5,6 +5,8 @@ import {
   analyzeStructure,
   analyzeTrust,
   synthesizeReport,
+  sleep,
+  GEMINI_DELAY_MS,
 } from "@/lib/gemini";
 import { DimensionResult } from "@/lib/types";
 
@@ -28,14 +30,14 @@ export async function GET() {
         `text ${Math.round(capture.textContent.length / 1024)}KB`
     );
 
-    // Step 2: Parallel Gemini analysis
-    log.push(`[2/4] Sending to Gemini (3 parallel calls) ...`);
+    // Step 2: Sequential Gemini analysis (rate-limit safe)
+    log.push(`[2/4] Sending to Gemini (3 sequential calls) ...`);
     const t1 = Date.now();
-    const [visual, structure, trust] = await Promise.all([
-      analyzeVisualDesign(capture.screenshot),
-      analyzeStructure(capture.html, capture.textContent),
-      analyzeTrust(capture.screenshot, capture.html),
-    ]);
+    const visual = await analyzeVisualDesign(capture.screenshot);
+    await sleep(GEMINI_DELAY_MS);
+    const structure = await analyzeStructure(capture.html, capture.textContent);
+    await sleep(GEMINI_DELAY_MS);
+    const trust = await analyzeTrust(capture.screenshot, capture.html);
     timings.analysis = Date.now() - t1;
     log.push(`  ✓ Analysis complete in ${timings.analysis}ms`);
 
@@ -43,6 +45,7 @@ export async function GET() {
 
     // Step 3: Synthesis
     log.push(`[3/4] Synthesizing report ...`);
+    await sleep(GEMINI_DELAY_MS);
     const t2 = Date.now();
     const synthesis = await synthesizeReport(dimensions);
     timings.synthesis = Date.now() - t2;

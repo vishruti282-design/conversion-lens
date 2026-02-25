@@ -8,6 +8,33 @@ import {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
+export const GEMINI_DELAY_MS = 2000;
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function callGemini(
+  content: Parameters<typeof model.generateContent>[0]
+) {
+  try {
+    return await model.generateContent(content);
+  } catch (error: unknown) {
+    const status =
+      error instanceof Error && "status" in error
+        ? (error as { status: number }).status
+        : undefined;
+    const msg = error instanceof Error ? error.message : String(error);
+
+    if (status === 429 || msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+      console.warn("Gemini 429 rate limit hit — waiting 60s before retry…");
+      await sleep(60000);
+      return await model.generateContent(content);
+    }
+    throw error;
+  }
+}
+
 const SYSTEM_PREAMBLE = `You are a senior conversion rate optimization and design consultant with 30 years of experience analyzing landing pages. You combine deep expertise in UX design, copywriting, behavioral psychology, and web performance to provide actionable, evidence-based recommendations.`;
 
 function parseGeminiJSON<T>(raw: string): T {
@@ -81,7 +108,7 @@ ${contextClause(ctx)}
 Respond ONLY with valid JSON matching this exact schema — an array of 3 dimension objects:
 [${DIMENSION_SCHEMA}]`;
 
-  const result = await model.generateContent([
+  const result = await callGemini([
     { text: prompt },
     {
       inlineData: {
@@ -131,7 +158,7 @@ ${contextClause(ctx)}
 Respond ONLY with valid JSON matching this exact schema — an array of 4 dimension objects:
 [${DIMENSION_SCHEMA}]`;
 
-  const result = await model.generateContent(prompt);
+  const result = await callGemini(prompt);
   const text = result.response.text();
   return parseGeminiJSON<DimensionResult[]>(text);
 }
@@ -159,7 +186,7 @@ ${contextClause(ctx)}
 Respond ONLY with valid JSON matching this exact schema — an array with 1 dimension object:
 [${DIMENSION_SCHEMA}]`;
 
-  const result = await model.generateContent([
+  const result = await callGemini([
     { text: prompt },
     {
       inlineData: {
@@ -201,7 +228,7 @@ Synthesize these findings into an executive summary. Identify the 3 most impactf
 Respond ONLY with valid JSON matching this exact schema:
 ${SYNTHESIS_SCHEMA}`;
 
-  const result = await model.generateContent(prompt);
+  const result = await callGemini(prompt);
   const text = result.response.text();
   return parseGeminiJSON<Synthesis>(text);
 }

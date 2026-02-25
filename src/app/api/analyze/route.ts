@@ -8,6 +8,8 @@ import {
   analyzeStructure,
   analyzeTrust,
   synthesizeReport,
+  sleep,
+  GEMINI_DELAY_MS,
 } from "@/lib/gemini";
 import {
   AnalyzeRequest,
@@ -41,12 +43,11 @@ async function runAnalysisPipeline(
 ): Promise<{ report: Report; screenshot: string }> {
   const capture = await capturePage(url);
 
-  const [visualDimensions, structureDimensions, trustDimensions] =
-    await Promise.all([
-      analyzeVisualDesign(capture.screenshot, campaignContext),
-      analyzeStructure(capture.html, capture.textContent, campaignContext),
-      analyzeTrust(capture.screenshot, capture.html, campaignContext),
-    ]);
+  const visualDimensions = await analyzeVisualDesign(capture.screenshot, campaignContext);
+  await sleep(GEMINI_DELAY_MS);
+  const structureDimensions = await analyzeStructure(capture.html, capture.textContent, campaignContext);
+  await sleep(GEMINI_DELAY_MS);
+  const trustDimensions = await analyzeTrust(capture.screenshot, capture.html, campaignContext);
 
   const dimensions: DimensionResult[] = [
     ...visualDimensions,
@@ -54,6 +55,7 @@ async function runAnalysisPipeline(
     ...trustDimensions,
   ];
 
+  await sleep(GEMINI_DELAY_MS);
   const synthesis = await synthesizeReport(dimensions, campaignContext);
 
   const totalScore = dimensions.reduce((sum, d) => sum + d.score, 0);
@@ -101,14 +103,14 @@ export async function POST(request: NextRequest) {
 
     // A/B comparison mode
     if (body.comparisonUrl) {
-      const [resultA, resultB] = await Promise.all([
-        runAnalysisPipeline(body.url, campaignContext),
-        runAnalysisPipeline(body.comparisonUrl, campaignContext),
-      ]);
+      const resultA = await runAnalysisPipeline(body.url, campaignContext);
+      await sleep(GEMINI_DELAY_MS);
+      const resultB = await runAnalysisPipeline(body.comparisonUrl, campaignContext);
 
       resultA.report.comparisonUrl = body.comparisonUrl;
       resultB.report.comparisonUrl = body.url;
 
+      await sleep(GEMINI_DELAY_MS);
       const comparison = await synthesizeReport(
         [...resultA.report.dimensions, ...resultB.report.dimensions],
         campaignContext
