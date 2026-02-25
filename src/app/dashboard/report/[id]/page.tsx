@@ -1051,8 +1051,14 @@ export default function ReportPage() {
           }}
         >
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push(`/dashboard/report/${id}/detailed`)}
             className="bg-brand text-white font-semibold py-2.5 px-5 rounded-lg text-sm transition-colors hover:bg-brand/90"
+          >
+            View Detailed Report
+          </button>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="border border-dark/15 text-dark font-semibold py-2.5 px-5 rounded-lg text-sm transition-colors hover:bg-dark/5"
           >
             Analyze Another Page
           </button>
