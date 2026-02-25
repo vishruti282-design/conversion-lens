@@ -1,57 +1,24 @@
-import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium-min";
-import { existsSync } from "fs";
 import { PageCapture } from "./types";
 
-const REMOTE_CHROMIUM_URL =
-  "https://github.com/nicholasgasior/chromium-builds/releases/download/128.0.6566.0/chromium-pack.tar";
+const THUM_IO_BASE = "https://image.thum.io/get/width/1280/crop/1024/";
 
-const LOCAL_CHROME_PATHS = [
-  // macOS
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/Applications/Chromium.app/Contents/MacOS/Chromium",
-  // Linux
-  "/usr/bin/google-chrome",
-  "/usr/bin/google-chrome-stable",
-  "/usr/bin/chromium",
-  "/usr/bin/chromium-browser",
-];
-
-function findLocalChrome(): string {
-  if (process.env.CHROME_EXECUTABLE_PATH) {
-    return process.env.CHROME_EXECUTABLE_PATH;
-  }
-  for (const p of LOCAL_CHROME_PATHS) {
-    if (existsSync(p)) return p;
-  }
-  throw new Error(
-    "Chrome not found locally. Install Google Chrome or set CHROME_EXECUTABLE_PATH env var."
-  );
-}
-
-async function launchBrowser() {
-  const isServerless =
-    !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-
-  if (isServerless) {
-    const executablePath = await chromium.executablePath(REMOTE_CHROMIUM_URL);
-    return puppeteer.launch({
-      args: chromium.args,
-      executablePath,
-      headless: true,
-    });
-  }
-
-  // Local development — use installed Chrome
-  return puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-    ],
-    executablePath: findLocalChrome(),
-    headless: true,
-  });
+function stripHtmlTags(html: string): string {
+  // Remove script and style blocks entirely
+  let text = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Remove all tags
+  text = text.replace(/<[^>]+>/g, " ");
+  // Decode common HTML entities
+  text = text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+  // Collapse whitespace
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
 }
 
 export async function capturePage(url: string): Promise<PageCapture> {
@@ -69,54 +36,48 @@ export async function capturePage(url: string): Promise<PageCapture> {
     );
   }
 
-  let browser;
-  try {
-    browser = await launchBrowser();
+  // Fetch screenshot and HTML in parallel
+  const [screenshotResult, htmlResult] = await Promise.allSettled([
+    fetch(`${THUM_IO_BASE}${url}`, { signal: AbortSignal.timeout(30000) })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Screenshot service returned ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        return Buffer.from(buffer).toString("base64");
+      }),
+    fetch(url, {
+      signal: AbortSignal.timeout(30000),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`Page returned ${res.status}`);
+      return res.text();
+    }),
+  ]);
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
-
-    await page.goto(url, {
-      waitUntil: "networkidle2",
-      timeout: 30000,
-    });
-
-    const screenshot = await page.screenshot({
-      fullPage: true,
-      encoding: "base64",
-    });
-
-    const html = await page.content();
-
-    const textContent = await page.evaluate(
-      () => document.body.innerText
-    );
-
-    return {
-      screenshot: screenshot as string,
-      html,
-      textContent,
-      url,
-    };
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
-
-    if (message.includes("net::ERR_")) {
-      throw new Error(
-        `Network error: Could not reach ${url}. Please check the URL and try again.`
-      );
-    }
+  // HTML is required — screenshot is best-effort
+  if (htmlResult.status === "rejected") {
+    const message = htmlResult.reason?.message || String(htmlResult.reason);
     if (message.includes("timeout") || message.includes("Timeout")) {
       throw new Error(
         `Timeout: The page at ${url} took too long to load (30s limit).`
       );
     }
-
-    throw new Error(`Failed to capture page: ${message}`);
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
+    throw new Error(
+      `Network error: Could not reach ${url}. Please check the URL and try again.`
+    );
   }
+
+  const html = htmlResult.value;
+  const screenshot =
+    screenshotResult.status === "fulfilled" ? screenshotResult.value : "";
+  const textContent = stripHtmlTags(html);
+
+  return {
+    screenshot,
+    html,
+    textContent,
+    url,
+  };
 }
