@@ -6,7 +6,7 @@ import {
 } from "./types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const SYSTEM_PREAMBLE = `You are a senior conversion rate optimization and design consultant with 30 years of experience analyzing landing pages. You combine deep expertise in UX design, copywriting, behavioral psychology, and web performance to provide actionable, evidence-based recommendations.`;
 
