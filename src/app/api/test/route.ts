@@ -10,6 +10,7 @@ import {
 } from "@/lib/gemini";
 import { DimensionResult } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 120; // allow up to 2 min for the full pipeline
 
 export async function GET() {
