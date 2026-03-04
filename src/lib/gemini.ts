@@ -108,16 +108,14 @@ ${contextClause(ctx)}
 Respond ONLY with valid JSON matching this exact schema — an array of 3 dimension objects:
 [${DIMENSION_SCHEMA}]`;
 
-  const result = await callGemini([
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "image/png",
-        data: screenshotBase64,
-      },
-    },
-  ]);
+  const content: Parameters<typeof callGemini>[0] = screenshotBase64
+    ? [
+        { text: prompt },
+        { inlineData: { mimeType: "image/png", data: screenshotBase64 } },
+      ]
+    : prompt;
 
+  const result = await callGemini(content);
   const text = result.response.text();
   return parseGeminiJSON<DimensionResult[]>(text);
 }
@@ -186,16 +184,14 @@ ${contextClause(ctx)}
 Respond ONLY with valid JSON matching this exact schema — an array with 1 dimension object:
 [${DIMENSION_SCHEMA}]`;
 
-  const result = await callGemini([
-    { text: prompt },
-    {
-      inlineData: {
-        mimeType: "image/png",
-        data: screenshotBase64,
-      },
-    },
-  ]);
+  const content: Parameters<typeof callGemini>[0] = screenshotBase64
+    ? [
+        { text: prompt },
+        { inlineData: { mimeType: "image/png", data: screenshotBase64 } },
+      ]
+    : prompt;
 
+  const result = await callGemini(content);
   const text = result.response.text();
   return parseGeminiJSON<DimensionResult[]>(text);
 }
