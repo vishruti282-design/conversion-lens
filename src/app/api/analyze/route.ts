@@ -4,9 +4,7 @@ import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { capturePage } from "@/lib/capture";
 import {
-  analyzeVisualDesign,
-  analyzeStructure,
-  analyzeTrust,
+  analyzeAll,
   synthesizeReport,
   sleep,
   GEMINI_DELAY_MS,
@@ -14,7 +12,6 @@ import {
 import {
   AnalyzeRequest,
   CampaignContext,
-  DimensionResult,
   Report,
   ComparisonReport,
 } from "@/lib/types";
@@ -43,17 +40,12 @@ async function runAnalysisPipeline(
 ): Promise<{ report: Report; screenshot: string }> {
   const capture = await capturePage(url);
 
-  const visualDimensions = await analyzeVisualDesign(capture.screenshot, campaignContext);
-  await sleep(GEMINI_DELAY_MS);
-  const structureDimensions = await analyzeStructure(capture.html, capture.textContent, campaignContext);
-  await sleep(GEMINI_DELAY_MS);
-  const trustDimensions = await analyzeTrust(capture.screenshot, capture.html, campaignContext);
-
-  const dimensions: DimensionResult[] = [
-    ...visualDimensions,
-    ...structureDimensions,
-    ...trustDimensions,
-  ];
+  const dimensions = await analyzeAll(
+    capture.screenshot,
+    capture.html,
+    capture.textContent,
+    campaignContext
+  );
 
   await sleep(GEMINI_DELAY_MS);
   const synthesis = await synthesizeReport(dimensions, campaignContext);

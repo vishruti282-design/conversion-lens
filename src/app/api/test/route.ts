@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import { capturePage } from "@/lib/capture";
 import {
-  analyzeVisualDesign,
-  analyzeStructure,
-  analyzeTrust,
+  analyzeAll,
   synthesizeReport,
   sleep,
   GEMINI_DELAY_MS,
 } from "@/lib/gemini";
-import { DimensionResult } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // allow up to 2 min for the full pipeline
@@ -20,7 +17,7 @@ export async function GET() {
 
   try {
     // Step 1: Capture
-    log.push(`[1/4] Capturing ${url} ...`);
+    log.push(`[1/3] Capturing ${url} ...`);
     const t0 = Date.now();
     const capture = await capturePage(url);
     timings.capture = Date.now() - t0;
@@ -31,33 +28,31 @@ export async function GET() {
         `text ${Math.round(capture.textContent.length / 1024)}KB`
     );
 
-    // Step 2: Sequential Gemini analysis (rate-limit safe)
-    log.push(`[2/4] Sending to Gemini (3 sequential calls) ...`);
+    // Step 2: Single Gemini call for all 8 dimensions
+    log.push(`[2/3] Analyzing all 8 dimensions (1 Gemini call) ...`);
     const t1 = Date.now();
-    const visual = await analyzeVisualDesign(capture.screenshot);
-    await sleep(GEMINI_DELAY_MS);
-    const structure = await analyzeStructure(capture.html, capture.textContent);
-    await sleep(GEMINI_DELAY_MS);
-    const trust = await analyzeTrust(capture.screenshot, capture.html);
+    const dimensions = await analyzeAll(
+      capture.screenshot,
+      capture.html,
+      capture.textContent
+    );
     timings.analysis = Date.now() - t1;
-    log.push(`  ✓ Analysis complete in ${timings.analysis}ms`);
-
-    const dimensions: DimensionResult[] = [...visual, ...structure, ...trust];
+    log.push(`  ✓ Analysis complete in ${timings.analysis}ms — ${dimensions.length} dimensions`);
 
     // Step 3: Synthesis
-    log.push(`[3/4] Synthesizing report ...`);
+    log.push(`[3/3] Synthesizing report ...`);
     await sleep(GEMINI_DELAY_MS);
     const t2 = Date.now();
     const synthesis = await synthesizeReport(dimensions);
     timings.synthesis = Date.now() - t2;
     log.push(`  ✓ Synthesis complete in ${timings.synthesis}ms`);
 
-    // Step 4: Build results
+    // Build results
     const totalScore = dimensions.reduce((s, d) => s + d.score, 0);
     const maxScore = dimensions.reduce((s, d) => s + d.maxScore, 0);
     timings.total = Date.now() - t0;
 
-    log.push(`[4/4] Done in ${timings.total}ms total`);
+    log.push(`Done in ${timings.total}ms total`);
     log.push("");
     log.push(`=== SCORE: ${totalScore} / ${maxScore} ===`);
 

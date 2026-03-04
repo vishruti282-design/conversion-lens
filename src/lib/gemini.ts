@@ -8,7 +8,7 @@ import {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-export const GEMINI_DELAY_MS = 2000;
+export const GEMINI_DELAY_MS = 500;
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -102,13 +102,24 @@ const SYNTHESIS_SCHEMA = `{
   "actionPlan": ["string (prioritized action items)"]
 }`;
 
-export async function analyzeVisualDesign(
+/**
+ * Single Gemini call that analyzes all 8 dimensions at once.
+ * Accepts screenshot (optional) + HTML + text content.
+ */
+export async function analyzeAll(
   screenshotBase64: string,
+  html: string,
+  textContent: string,
   ctx?: CampaignContext
 ): Promise<DimensionResult[]> {
+  const truncatedHtml = html.slice(0, 15000);
+  const truncatedText = textContent.slice(0, 5000);
+
   const prompt = `${SYSTEM_PREAMBLE}
 
-Analyze the provided landing page screenshot across these 3 dimensions:
+Analyze the provided landing page across ALL 8 dimensions below. You are given ${screenshotBase64 ? "a screenshot, " : ""}the page HTML, and extracted text content.
+
+**Design Dimensions:**
 
 1. **A1 - Visual Hierarchy** (max score: 15)
    Evaluate how effectively the page guides the eye. Consider F/Z-pattern compliance, whitespace usage, contrast ratios, size hierarchy, and visual flow.
@@ -119,46 +130,21 @@ Analyze the provided landing page screenshot across these 3 dimensions:
 3. **A3 - UI Consistency** (max score: 10)
    Evaluate design system consistency including color palette, spacing rhythm, component styling, icon consistency, and border treatments.
 
-For each dimension, provide 2-4 findings with actionable recommendations.
-${contextClause(ctx)}
-
-Respond ONLY with valid JSON matching this exact schema — an array of 3 dimension objects:
-[${DIMENSION_SCHEMA}]`;
-
-  const content: Parameters<typeof callGemini>[0] = screenshotBase64
-    ? [
-        { text: prompt },
-        { inlineData: { mimeType: "image/png", data: screenshotBase64 } },
-      ]
-    : prompt;
-
-  const result = await callGemini(content);
-  const text = result.response.text();
-  return parseGeminiJSON<DimensionResult[]>(text);
-}
-
-export async function analyzeStructure(
-  html: string,
-  textContent: string,
-  ctx?: CampaignContext
-): Promise<DimensionResult[]> {
-  const truncatedHtml = html.slice(0, 15000);
-  const truncatedText = textContent.slice(0, 5000);
-
-  const prompt = `${SYSTEM_PREAMBLE}
-
-Analyze the provided landing page HTML and text content across these 4 dimensions:
-
-1. **A4 - Accessibility** (max score: 15)
+4. **A4 - Accessibility** (max score: 15)
    Check semantic HTML, ARIA labels, alt text, heading structure, color contrast indicators, keyboard navigation potential, and form labels.
 
-2. **B1 - Message Clarity** (max score: 15)
+**Conversion Dimensions:**
+
+5. **B1 - Message Clarity** (max score: 15)
    Evaluate the headline, subheadline, value proposition clarity, benefit communication, jargon usage, and reading level.
 
-3. **B3 - CTA Mechanics** (max score: 15)
+6. **B2 - Persuasion & Trust Architecture** (max score: 15)
+   Evaluate social proof elements (testimonials, logos, reviews, stats), trust signals (security badges, guarantees, certifications), authority indicators, reciprocity elements, scarcity/urgency tactics, and overall trust architecture.
+
+7. **B3 - CTA Mechanics** (max score: 15)
    Evaluate CTA button text, placement, contrast, urgency, specificity, number of CTAs, and friction reduction.
 
-4. **B4 - Content Strategy** (max score: 5)
+8. **B4 - Content Strategy** (max score: 5)
    Evaluate content structure, scanability, bullet points, above-the-fold content density, and information hierarchy.
 
 For each dimension, provide 2-4 findings with actionable recommendations.
@@ -170,35 +156,7 @@ PAGE TEXT CONTENT (truncated):
 ${truncatedText}
 ${contextClause(ctx)}
 
-Respond ONLY with valid JSON matching this exact schema — an array of 4 dimension objects:
-[${DIMENSION_SCHEMA}]`;
-
-  const result = await callGemini(prompt);
-  const text = result.response.text();
-  return parseGeminiJSON<DimensionResult[]>(text);
-}
-
-export async function analyzeTrust(
-  screenshotBase64: string,
-  html: string,
-  ctx?: CampaignContext
-): Promise<DimensionResult[]> {
-  const truncatedHtml = html.slice(0, 10000);
-
-  const prompt = `${SYSTEM_PREAMBLE}
-
-Analyze the provided landing page screenshot and HTML for trust and persuasion:
-
-1. **B2 - Persuasion & Trust Architecture** (max score: 15)
-   Evaluate social proof elements (testimonials, logos, reviews, stats), trust signals (security badges, guarantees, certifications), authority indicators, reciprocity elements, scarcity/urgency tactics, and overall trust architecture.
-
-Provide 3-5 findings with actionable recommendations.
-
-PAGE HTML (truncated):
-${truncatedHtml}
-${contextClause(ctx)}
-
-Respond ONLY with valid JSON matching this exact schema — an array with 1 dimension object:
+Respond ONLY with valid JSON matching this exact schema — an array of 8 dimension objects:
 [${DIMENSION_SCHEMA}]`;
 
   const content: Parameters<typeof callGemini>[0] = screenshotBase64
