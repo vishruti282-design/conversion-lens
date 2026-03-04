@@ -38,7 +38,24 @@ async function callGemini(
 const SYSTEM_PREAMBLE = `You are a senior conversion rate optimization and design consultant with 30 years of experience analyzing landing pages. You combine deep expertise in UX design, copywriting, behavioral psychology, and web performance to provide actionable, evidence-based recommendations.`;
 
 function parseGeminiJSON<T>(raw: string): T {
-  const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+  // Strip markdown code fences
+  let cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+  // Extract the first complete JSON array or object
+  const start = cleaned.indexOf("[") !== -1 && (cleaned.indexOf("{") === -1 || cleaned.indexOf("[") < cleaned.indexOf("{"))
+    ? cleaned.indexOf("[")
+    : cleaned.indexOf("{");
+  if (start > 0) cleaned = cleaned.slice(start);
+  // Find matching closing bracket
+  const openChar = cleaned[0];
+  const closeChar = openChar === "[" ? "]" : "}";
+  let depth = 0;
+  let end = -1;
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === openChar) depth++;
+    else if (cleaned[i] === closeChar) depth--;
+    if (depth === 0) { end = i; break; }
+  }
+  if (end !== -1) cleaned = cleaned.slice(0, end + 1);
   return JSON.parse(cleaned) as T;
 }
 
